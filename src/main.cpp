@@ -5,12 +5,16 @@
 #include "hardware-configs/boardConfig.h"
 
 
-// Data structs
+// ============== Data Structs ==============
 
 struct IMUData {
   float accel[3]; // x, y, z acceleration values
   float gyro[3];  // x, y, z gyroscope values
-} imuData;
+} imu1Data, imu2Data;
+
+struct MagData {
+  float mag[3]; // x, y, z magnetometer values
+} mag1Data, mag2Data;
 
 struct BaroData {
   float pressure; // Pressure in hPa
@@ -32,6 +36,8 @@ struct TelemetryPacket {
   float lat, lon; // Latitude and Longitude
   uint16_t packetID; // Incrementing packet ID for tracking
 } telemetry;
+
+// ============== Setup ==============
 
 void setup() {
   // Initialize RS-485 serial communication to Panda V2
@@ -56,6 +62,10 @@ void setup() {
 
 }
 
+// ============== Main Loop ==============
+
 void loop() {
   // put your main code here, to run repeatedly:
 }
+
+// ============== Sensor Reading Functions ==============
