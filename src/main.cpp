@@ -1,9 +1,53 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Wire.h>
+#include <time.h>
+#include "SparkFun_u-blox_GNSS_Arduino_Library.h"
+#include "RH_RF95.h"
+#include "Adafruit_ADXL375.h"
+#include "SparkFun_BMI270_Arduino_Library.h"
+#include "Adafruit_LIS2MDL.h"
+#include "MS5611.h"
 #include "hardware-configs/pins.h"
 #include "hardware-configs/boardConfig.h"
 
+/*
+  Implementation list:
+  - Connection to all sensors (IMUs, magnetometers, barometer, GPS)
+  - Reading data from all sensors
+  - Transmit all data over 433MHz LoRa to ground station
+  - Check for faulty sensors, and implement fallback logic
+  - 
+*/
+
+#define IMU1_RATE_HZ    1000
+#define IMU2_RATE_HZ    1000
+#define MAG_RATE_HZ     100
+#define BARO_RATE_HZ    50
+#define GPS_RATE_HZ     10
+#define LORA_RATE_HZ    10
+
+#define RF_95_FREQ 433.0
+
+// ============== Sensor Initialization ==============
+
+BMI270 imu1; // First IMU
+Adafruit_ADXL343 imu2; // Second IMU
+
+Adafruit_LIS2MDL mag1; // First magnetometer
+Adafruit_LIS2MDL mag2; // Second magnetometer
+
+MS5611 baro; // Barometer
+
+SFE_UBLOX_GNSS gps; // GPS module
+
+RH_RF95 rf95(RFM_95_CS, RFM_95_INT); // LoRa radio
+
+uint32_t lastIMU_us   = 0;
+uint32_t lastMag_us   = 0;
+uint32_t lastBaro_us  = 0;
+uint32_t lastGPS_us   = 0;
+uint32_t lastLoRa_us  = 0;
 
 // ============== Data Structs ==============
 
@@ -52,20 +96,134 @@ void setup() {
   SPI.setClockDivider(4);
   // Initialize magnetometers and barometers here
 
+  mag1.begin(); // Initialize magnetometer 1
+  mag2.begin(); // Initialize magnetometer 2
+
+  imu1.beginSPI(IMU_CS); // Initialize IMU 1 over SPI using barometer CS pin
+
   SPI1.begin();
   SPI1.setClockDivider(4);
   // Initialize LoRa module here
+
+  pinMode(RFM_95_RST, OUTPUT);
+  digitalWrite(RFM_95_RST, HIGH);
+
+
 
   Wire.begin();
   Wire.setClock(400000);
   // Initialize IMUs here
 
+  imu2.begin(); // Initialize IMU 2 over I2C
+
+  while(!gps.begin(Serial1)) {
+    Serial.println("GPS not detected, retrying...");
+    delay(1000);
+  }
+
 }
+
+// ============== Sensor Reading Functions ==============
+
+void readIMUData() {
+  // Read data from both IMUs and populate imu1Data and imu2Data
+  imu1.getSensorData();
+  imu1Data.accel[0] = imu1.data.accelX;
+  imu1Data.accel[1] = imu1.data.accelY;
+  imu1Data.accel[2] = imu1.data.accelZ;
+  imu1Data.gyro[0] = imu1.data.gyroX;
+  imu1Data.gyro[1] = imu1.data.gyroY;
+  imu1Data.gyro[2] = imu1.data.gyroZ;
+
+  sensors_event_t event;
+  imu2.getEvent(&event);
+  imu2Data.accel[0] = event.acceleration.x;
+  imu2Data.accel[1] = event.acceleration.y;
+  imu2Data.accel[2] = event.acceleration.z;
+  imu2Data.gyro[0] = event.gyro.x;
+  imu2Data.gyro[1] = event.gyro.y;
+  imu2Data.gyro[2] = event.gyro.z;
+}
+
+void readMagData() {
+  // Read data from both magnetometers and populate mag1Data and mag2Data
+  sensors_event_t event;
+  mag1.getEvent(&event);
+  mag1Data.mag[0] = event.magnetic.x;
+  mag1Data.mag[1] = event.magnetic.y;
+  mag1Data.mag[2] = event.magnetic.z;
+  
+  mag2.getEvent(&event);
+  mag2Data.mag[0] = event.magnetic.x;
+  mag2Data.mag[1] = event.magnetic.y;
+  mag2Data.mag[2] = event.magnetic.z;
+}
+
+void readBaroData() {
+  // Read data from barometer and populate baroData
+  baroData.pressure = baro.getPressure();
+  baroData.altitude = baro.getAltitude();
+}
+
+void readGPSData() {
+  // Read data from GPS and populate gpsData
+  gpsData.lat = gps.getLatitude();
+  gpsData.lon = gps.getLongitude();
+  gpsData.altitude = gps.getAltitude();
+  gpsData.numSatellites = gps.getSIV();
+  gpsData.valid = gps.getFixType() > 0; // Valid if we have
+}
+// ============== Main Loop ==============
+
+void transmitTelemetry() {
+  // Populate telemetry packet
+  telemetry.timestamp = millis();
+  telemetry.roll = 0; // Placeholder, calculate from IMU data
+  telemetry.pitch = 0; // Placeholder, calculate from IMU data
+  telemetry.yaw = 0; // Placeholder, calculate from IMU data
+  telemetry.altitude = baroData.altitude;
+  telemetry.lat = gpsData.lat;
+  telemetry.lon = gpsData.lon;
+  telemetry.packetID++;
+
+  // Transmit telemetry packet over LoRa
+  // Implement LoRa transmission logic here
+}
+
 
 // ============== Main Loop ==============
 
 void loop() {
   // put your main code here, to run repeatedly:
-}
+  uint32_t now = micros();
 
-// ============== Sensor Reading Functions ==============
+  // Find IMU frequency
+  if (now - lastIMU_us >= (1000000 / IMU1_RATE_HZ)) {
+    readIMUData();
+    lastIMU_us = now;
+  }
+
+  // Find magnetometer frequency
+  if (now - lastMag_us >= (1000000 / MAG_RATE_HZ)) {
+    readMagData();
+    lastMag_us = now;
+  }
+
+  // Find barometer frequency
+  if (now - lastBaro_us >= (1000000 / BARO_RATE_HZ)) {
+    readBaroData();
+    lastBaro_us = now;
+  }
+
+  // Find GPS frequency
+  if (now - lastGPS_us >= (1000000 / GPS_RATE_HZ)) {
+    readGPSData();
+    lastGPS_us = now;
+  }
+
+  // Find LoRa transmission frequency
+  if (now - lastLoRa_us >= (1000000 / LORA_RATE_HZ)) {
+    transmitTelemetry();
+    lastLoRa_us = now;
+  }
+}
