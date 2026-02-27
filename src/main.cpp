@@ -108,7 +108,9 @@ void setup() {
   pinMode(RFM_95_RST, OUTPUT);
   digitalWrite(RFM_95_RST, HIGH);
 
-
+  rf95.init();
+  rf95.setFrequency(RF_95_FREQ);
+  rf95.setTxPower(15, false); // Set transmission power to 15 dBm (adjust as needed)
 
   Wire.begin();
   Wire.setClock(400000);
@@ -140,9 +142,6 @@ void readIMUData() {
   imu2Data.accel[0] = event.acceleration.x;
   imu2Data.accel[1] = event.acceleration.y;
   imu2Data.accel[2] = event.acceleration.z;
-  imu2Data.gyro[0] = event.gyro.x;
-  imu2Data.gyro[1] = event.gyro.y;
-  imu2Data.gyro[2] = event.gyro.z;
 }
 
 void readMagData() {
@@ -188,6 +187,9 @@ void transmitTelemetry() {
 
   // Transmit telemetry packet over LoRa
   // Implement LoRa transmission logic here
+
+  rf95.send((uint8_t *)&telemetry, sizeof(telemetry));
+  rf95.waitPacketSent();
 }
 
 
@@ -226,4 +228,10 @@ void loop() {
     transmitTelemetry();
     lastLoRa_us = now;
   }
+
+  // Fault detection and fallback logic
+
+  // Store data to flash
+
+  // Move data to SD card in idle time (because SD card writing is slow and can cause delays)
 }
