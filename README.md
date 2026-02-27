@@ -17,8 +17,8 @@ The MOE Flight Computer integrates multiple redundant sensors to ensure reliable
 |--------|-------|-----------|---------|
 | Primary IMU | BMI270 | SPI | 6-axis accelerometer + gyroscope (1000 Hz) |
 | Secondary IMU | ADXL343/375 | I2C | High-g accelerometer for redundancy |
-| Magnetometer 1 | LIS2MDL | I2C | 3-axis magnetic field sensing (100 Hz) |
-| Magnetometer 2 | LIS2MDL | I2C | Redundant magnetometer |
+| Magnetometer 1 | LIS2MDL | SPI | 3-axis magnetic field sensing (100 Hz) |
+| Magnetometer 2 | LIS2MDL | SPI | Redundant magnetometer |
 | Barometer | MS5611 | SPI | Pressure/altitude measurement (50 Hz) |
 | GPS | u-blox GNSS | Serial (UART) | Position and velocity tracking (10 Hz) |
 
