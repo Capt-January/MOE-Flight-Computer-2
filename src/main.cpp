@@ -2,6 +2,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <time.h>
+#include <SD.h>
 #include "SparkFun_u-blox_GNSS_Arduino_Library.h"
 #include "RH_RF95.h"
 #include "Adafruit_ADXL375.h"
@@ -22,10 +23,12 @@
 
 #define IMU1_RATE_HZ    1000
 #define IMU2_RATE_HZ    1000
+#define SD_LOG_RATE_HZ  100
 #define MAG_RATE_HZ     100
 #define BARO_RATE_HZ    50
 #define GPS_RATE_HZ     10
 #define LORA_RATE_HZ    10
+
 
 #define RF_95_FREQ 433.0
 
@@ -48,6 +51,7 @@ uint32_t lastMag_us   = 0;
 uint32_t lastBaro_us  = 0;
 uint32_t lastGPS_us   = 0;
 uint32_t lastLoRa_us  = 0;
+uint32_t lastSD_us    = 0;
 
 // ============== Data Structs ==============
 
@@ -79,7 +83,16 @@ struct TelemetryPacket {
   float altitude; // Altitude in meters
   float lat, lon; // Latitude and Longitude
   uint16_t packetID; // Incrementing packet ID for tracking
+
+  TelemetryPacket() {
+    altitude = 0.0;
+    timestamp = 0;
+    packetID = 0;
+  }
 } telemetry;
+
+File logCSV;
+
 
 // ============== Setup ==============
 
@@ -122,6 +135,11 @@ void setup() {
     Serial.println("GPS not detected, retrying...");
     delay(1000);
   }
+
+  SD.begin(BUILTIN_SDCARD); // Initialize SD card read/write over SDIO
+
+
+
 
 }
 
@@ -172,7 +190,7 @@ void readGPSData() {
   gpsData.numSatellites = gps.getSIV();
   gpsData.valid = gps.getFixType() > 0; // Valid if we have
 }
-// ============== Main Loop ==============
+
 
 void transmitTelemetry() {
   // Populate telemetry packet
@@ -186,11 +204,30 @@ void transmitTelemetry() {
   telemetry.packetID++;
 
   // Transmit telemetry packet over LoRa
+
   // Implement LoRa transmission logic here
+
 
   rf95.send((uint8_t *)&telemetry, sizeof(telemetry));
   rf95.waitPacketSent();
 }
+
+// Write data to SD
+void writeToSD() {
+  logCSV = SD.open("flight_log.csv", FILE_WRITE);
+
+  logCSV.print(millis());
+  logCSV.print(",");
+  logCSV.print(baroData.altitude);
+  logCSV.print(",");
+  logCSV.print(gpsData.lat, 6);
+  logCSV.print(",");
+  logCSV.print(gpsData.lon, 6);
+  logCSV.print(",");
+  logCSV.flush();
+  logCSV.close();
+}
+
 
 
 // ============== Main Loop ==============
@@ -221,6 +258,12 @@ void loop() {
   if (now - lastGPS_us >= (1000000 / GPS_RATE_HZ)) {
     readGPSData();
     lastGPS_us = now;
+  }
+
+ // Write to SD
+if (now - lastSD_us >= (1000000 / SD_LOG_RATE_HZ)) {
+    writeToSD(); 
+    lastSD_us = now;
   }
 
   // Find LoRa transmission frequency
