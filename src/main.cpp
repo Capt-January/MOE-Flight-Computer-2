@@ -91,7 +91,7 @@ struct TelemetryPacket {
   }
 } telemetry;
 
-File logCSV;
+File globalFile; // Initialize global file object
 
 
 // ============== Setup ==============
@@ -138,7 +138,9 @@ void setup() {
 
   SD.begin(BUILTIN_SDCARD); // Initialize SD card read/write over SDIO
 
+  
 
+  globalFile = SD.open("flight_log.bin", FILE_WRITE); // Open log file for writing
 
 
 }
@@ -214,18 +216,21 @@ void transmitTelemetry() {
 
 // Write data to SD
 void writeToSD() {
-  logCSV = SD.open("flight_log.csv", FILE_WRITE);
+  /* globalFile.print(millis());
+  globalFile.print(",");
+  globalFile.print(baroData.altitude);
+  globalFile.print(",");
+  globalFile.print(gpsData.lat, 6);
+  globalFile.print(",");
+  globalFile.print(gpsData.lon, 6);
+  globalFile.print(",");
+  globalFile.flush();
+  globalFile.close();
+  */
 
-  logCSV.print(millis());
-  logCSV.print(",");
-  logCSV.print(baroData.altitude);
-  logCSV.print(",");
-  logCSV.print(gpsData.lat, 6);
-  logCSV.print(",");
-  logCSV.print(gpsData.lon, 6);
-  logCSV.print(",");
-  logCSV.flush();
-  logCSV.close();
+  globalFile.write((uint8_t *)&telemetry, sizeof(telemetry));
+  globalFile.flush();
+
 }
 
 
@@ -277,4 +282,6 @@ if (now - lastSD_us >= (1000000 / SD_LOG_RATE_HZ)) {
   // Store data to flash
 
   // Move data to SD card in idle time (because SD card writing is slow and can cause delays)
+
+  // IMU roll, pitch, yaw calc needed
 }
