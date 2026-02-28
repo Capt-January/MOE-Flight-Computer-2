@@ -23,11 +23,11 @@
 
 #define IMU1_RATE_HZ    1000
 #define IMU2_RATE_HZ    1000
-#define SD_LOG_RATE_HZ  100
 #define MAG_RATE_HZ     100
 #define BARO_RATE_HZ    50
 #define GPS_RATE_HZ     10
 #define LORA_RATE_HZ    10
+#define SD_LOG_RATE_HZ  10
 
 
 #define RF_95_FREQ 433.0
