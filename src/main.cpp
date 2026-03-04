@@ -11,6 +11,7 @@
 #include "MS5611.h"
 #include "hardware-configs/pins.h"
 #include "hardware-configs/boardConfig.h"
+#include "LittleFS.h"
 
 /*
   Implementation list:
@@ -24,6 +25,7 @@
 #define IMU1_RATE_HZ    1000
 #define IMU2_RATE_HZ    1000
 #define MAG_RATE_HZ     100
+#define FLASH_RATE_HZ   100
 #define BARO_RATE_HZ    50
 #define GPS_RATE_HZ     10
 #define LORA_RATE_HZ    10
@@ -44,6 +46,10 @@ MS5611 baro; // Barometer
 
 SFE_UBLOX_GNSS gps; // GPS module
 
+File globalFile; // Initialize global file object
+
+LittleFS_QSPIFlash myfs; // Initialize external flash manager
+
 RH_RF95 rf95(RFM_95_CS, RFM_95_INT); // LoRa radio
 
 uint32_t lastIMU_us   = 0;
@@ -51,7 +57,8 @@ uint32_t lastMag_us   = 0;
 uint32_t lastBaro_us  = 0;
 uint32_t lastGPS_us   = 0;
 uint32_t lastLoRa_us  = 0;
-uint32_t lastSD_us    = 0;
+// uint32_t lastSD_us    = 0;
+uint32_t lastFlash_us = 0;
 
 // ============== Data Structs ==============
 
@@ -88,10 +95,14 @@ struct TelemetryPacket {
     altitude = 0.0;
     timestamp = 0;
     packetID = 0;
+    lat = 0.0;   //
+    lon = 0.0;   // 
+    roll = 0.0;  // Placeholders so initial flash writes don't write garbage
+    pitch = 0.0; //
+    yaw = 0.0;   //
   }
 } telemetry;
 
-File globalFile; // Initialize global file object
 
 
 // ============== Setup ==============
@@ -100,6 +111,7 @@ void setup() {
   // Initialize RS-485 serial communication to Panda V2
   Serial8.begin(SERIAL_BAUD_RATE);
   Serial8.setTimeout(SERIAL_TIMEOUT);
+
 
   // Initialize GPS serial communication
   Serial1.begin(GPS_BAUD_RATE);
@@ -136,13 +148,16 @@ void setup() {
     delay(1000);
   }
 
-  SD.begin(BUILTIN_SDCARD); // Initialize SD card read/write over SDIO
+  myfs.begin(); // Initialize QSPI bus to flash
+
+ // SD.begin(BUILTIN_SDCARD); // Initialize SD card read/write over SDIO
 
   
+ // globalFile = SD.open("flight_log.bin", FILE_WRITE); // Open log file for writing (deprecated)
 
-  globalFile = SD.open("flight_log.bin", FILE_WRITE); // Open log file for writing
+  globalFile = myfs.open("flight_log.bin", FILE_WRITE); // Open log file for writing 
 
-
+  
 }
 
 // ============== Sensor Reading Functions ==============
@@ -214,6 +229,7 @@ void transmitTelemetry() {
   rf95.waitPacketSent();
 }
 
+
 // Write data to SD
 void writeToSD() {
   /* globalFile.print(millis());
@@ -233,7 +249,13 @@ void writeToSD() {
 
 }
 
+void writeToFlash() {
+  globalFile.write((uint8_t *)&telemetry, sizeof(telemetry));
+  if (telemetry.packetID % 50 == 0 && telemetry.packetID != 0) {
+    globalFile.flush();
+  }
 
+}
 
 // ============== Main Loop ==============
 
@@ -265,10 +287,16 @@ void loop() {
     lastGPS_us = now;
   }
 
- // Write to SD
-if (now - lastSD_us >= (1000000 / SD_LOG_RATE_HZ)) {
+  // Write to SD
+/* if (now - lastSD_us >= (1000000 / SD_LOG_RATE_HZ)) {
     writeToSD(); 
     lastSD_us = now;
+  }
+*/
+  // Write to flash
+  if (now - lastFlash_us >= (1000000 / FLASH_RATE_HZ)) {
+    writeToFlash();
+    lastFlash_us = now;
   }
 
   // Find LoRa transmission frequency
